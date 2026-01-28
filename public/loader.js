@@ -1,49 +1,47 @@
 
 /**
- * Ansury Systems - Universal Widget Loader
- * Properly isolates the widget using Shadow DOM and injects styles.
+ * Ansury Systems - Universal Smart Loader
+ * This script is the entry point for all client websites.
  */
 (function() {
   const script = document.currentScript;
   const clientId = script.getAttribute('data-client-id');
   
   if (!clientId) {
-    console.error('Ansury Systems: data-client-id is missing.');
+    console.error('Ansury Systems Error: Missing data-client-id attribute.');
     return;
   }
 
-  // Prevent double injection
-  if (document.getElementById('ansury-root')) return;
+  // Prevent multiple instances
+  if (document.getElementById('ansury-container')) return;
 
+  // Create the host container
   const container = document.createElement('div');
-  container.id = 'ansury-root';
-  container.style.position = 'fixed';
-  container.style.bottom = '0';
-  container.style.right = '0';
-  container.style.zIndex = '2147483647';
+  container.id = 'ansury-container';
+  container.style.cssText = 'position:fixed;bottom:0;right:0;z-index:2147483647;';
   document.body.appendChild(container);
 
+  // Attach Shadow DOM for style isolation
   const shadow = container.attachShadow({ mode: 'open' });
 
-  // Inject Tailwind via CDN inside Shadow DOM
-  const tw = document.createElement('script');
-  tw.src = 'https://cdn.tailwindcss.com';
-  shadow.appendChild(tw);
+  // Create the mount point for React
+  const root = document.createElement('div');
+  root.id = 'ansury-widget-root';
+  shadow.appendChild(root);
 
-  // Inject Google Fonts
-  const fontLink = document.createElement('link');
-  fontLink.rel = 'stylesheet';
-  fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap';
-  shadow.appendChild(fontLink);
-
-  const mountPoint = document.createElement('div');
-  mountPoint.id = 'ansury-mount';
-  mountPoint.style.fontFamily = "'Inter', sans-serif";
-  shadow.appendChild(mountPoint);
-
-  // In production, this would load the actual React build
-  console.log(`Ansury Engine: Connected to node [${clientId}]`);
+  // Load the bundled widget from CDN (Cloudflare R2/Pages)
+  const widgetScript = document.createElement('script');
+  // Replace with your production CDN URL
+  widgetScript.src = "https://cdn.ansury.systems/assets/ansury-widget.umd.js";
   
-  // Example of how we'd mount the React app inside the Shadow DOM:
-  // import('https://cdn.ansury.com/widget.js').then(m => m.render(mountPoint, clientId));
+  widgetScript.onload = () => {
+    // We assume the bundled widget exposes a global 'Ansury' object
+    if (window.AnsuryWidget && typeof window.AnsuryWidget.mount === 'function') {
+      window.AnsuryWidget.mount(root, { clientId });
+    } else {
+      console.error('Ansury Systems: Widget failed to initialize.');
+    }
+  };
+
+  shadow.appendChild(widgetScript);
 })();
