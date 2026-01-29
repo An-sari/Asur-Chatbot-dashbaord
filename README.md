@@ -1,88 +1,55 @@
+
 # 🦅 Ansury Systems - Enterprise Deployment
 
 High-ticket AI Sales Engine powered by Gemini 3 Pro reasoning.
 
 ---
 
-## 🛠 Cloudflare Setup (Must Follow)
+## 🛠 Database Schema (Supabase) - REPAIR & UPGRADE
 
-### 1. Cloudflare Pages (Main App)
-*   **Repo**: Link your GitHub repository.
-*   **Build Command**: `npm run build`
-*   **Root Directory**: `/`
-*   **Output Directory**: `dist`
-*   **Variables** (Settings > Variables):
-    *   `API_KEY`: Your Gemini API Key.
-    *   `NEXT_PUBLIC_SUPABASE_URL`: From Supabase dashboard.
-    *   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: From Supabase dashboard.
-
-### 2. Cloudflare R2 (CDN)
-The widget is a single-file library. Uploading to R2 ensures zero-latency loading.
-*   Run `npm run build`.
-*   Take `dist/ansury-widget.umd.js` and upload to an R2 bucket named `ansury-cdn`.
-*   Enable a Custom Domain for your bucket (e.g., `cdn.ansury.systems`).
-
-### 3. Cloudflare Worker (The Dynamic Loader)
-Deploy this worker to handle the `<script>` tag logic elegantly. This allows you to update the widget without asking clients to update their sites.
-
-```javascript
-// worker.js
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const clientId = url.searchParams.get('cid');
-    
-    const loaderCode = `
-(function() {
-  if (window.AnsuryLoaded) return;
-  window.AnsuryLoaded = true;
-  const container = document.createElement('div');
-  container.id = 'ansury-root';
-  document.body.appendChild(container);
-  const shadow = container.attachShadow({ mode: 'open' });
-  const script = document.createElement('script');
-  script.src = "https://cdn.ansury.systems/ansury-widget.umd.js";
-  script.onload = () => window.AnsuryWidget.mount(shadow, { clientId: "${clientId}" });
-  shadow.appendChild(script);
-})();`;
-
-    return new Response(loaderCode, {
-      headers: { 'Content-Type': 'application/javascript', 'Access-Control-Allow-Origin': '*' }
-    });
-  }
-}
-```
-
----
-
-## 🏗 Database Schema (Supabase)
-
-Execute in SQL Editor:
+If you are seeing "column not found" errors, run this script in your Supabase SQL Editor. It will safely add missing columns without deleting your data.
 
 ```sql
--- Client Table
-CREATE TABLE clients (
+-- 1. Upgrade Clients Table
+ALTER TABLE IF EXISTS clients 
+ADD COLUMN IF NOT EXISTS user_id TEXT,
+ADD COLUMN IF NOT EXISTS thinking_enabled BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS thinking_budget INTEGER DEFAULT 4000,
+ADD COLUMN IF NOT EXISTS authorized_origins TEXT[] DEFAULT ARRAY['*'];
+
+-- 2. Upgrade Leads Table
+-- Ensure ID is auto-generated to avoid 409 Conflict
+ALTER TABLE IF EXISTS leads 
+ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+-- 3. Create API Keys Table (Optional but recommended for high-ticket)
+CREATE TABLE IF NOT EXISTS api_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  key TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Verify/Re-create Clients Table if it doesn't exist
+CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
   name TEXT NOT NULL,
   primary_color TEXT DEFAULT '#101827',
   greeting TEXT DEFAULT 'Greetings. How may we assist your inquiry?',
   system_instruction TEXT NOT NULL,
   thinking_enabled BOOLEAN DEFAULT true,
   thinking_budget INTEGER DEFAULT 4000,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Leads Table
-CREATE TABLE leads (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id TEXT REFERENCES clients(id),
-  name TEXT,
-  email TEXT,
-  chat_transcript JSONB,
+  authorized_origins TEXT[] DEFAULT ARRAY['*'],
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
 ---
+
+## 🛠 Cloudflare Setup
+*   **API_KEY**: Set in Pages > Settings > Environment Variables.
+*   **VITE_SUPABASE_URL**: Set in Environment Variables.
+*   **VITE_SUPABASE_ANON_KEY**: Set in Environment Variables.
 
 *Architect: Senior Full-Stack Lead | Ansury 2025*

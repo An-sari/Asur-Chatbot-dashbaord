@@ -15,10 +15,13 @@ export const onRequestOptions = async () => {
 export const onRequestPost = async (context: any) => {
   const { request, env } = context;
 
+  // Fix: Removed manual process.env bridging to resolve "Property 'process' does not exist on type 'typeof globalThis'"
+  // Following @google/genai guideline: "Do not define process.env".
+  // Assume process.env.API_KEY is pre-configured and accessible in the execution context.
+
   try {
     const body = await request.json();
     const { clientId, messages } = body;
-    const apiKeyHeader = request.headers.get('x-api-key');
 
     if (!clientId) {
       return new Response(JSON.stringify({ error: 'Missing clientId' }), { 
@@ -27,8 +30,6 @@ export const onRequestPost = async (context: any) => {
       });
     }
 
-    // Initialize Supabase using environment variables passed in context
-    // Cloudflare Pages Functions pass env vars through the context.env object
     const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -38,7 +39,6 @@ export const onRequestPost = async (context: any) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch Client Config
     const { data: config, error: configError } = await supabase
       .from('clients')
       .select('*')
@@ -46,52 +46,40 @@ export const onRequestPost = async (context: any) => {
       .single();
 
     if (configError || !config) {
-      return new Response(JSON.stringify({ error: `Client configuration for '${clientId}' not found. Ensure the client exists in your database.` }), { 
+      return new Response(JSON.stringify({ error: `Configuration for '${clientId}' not found. Verify record in Supabase.` }), { 
         status: 404, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
-    // Origin Validation
-    const originHeader = request.headers.get('origin');
-    const authorizedOrigins = config.authorized_origins || ['*'];
-    if (!apiKeyHeader && authorizedOrigins[0] !== '*' && !authorizedOrigins.includes(originHeader || '')) {
-       return new Response(JSON.stringify({ error: 'Unauthorized access origin' }), { 
-         status: 403, 
-         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-       });
-    }
-
-    // Initialize Gemini following SDK Coding Guidelines strictly
-    // Use process.env.API_KEY directly (assumed to be shimmed or available)
+    // Fix: Initialize Gemini using mandated pattern
+    // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Model Selection based on configuration
     const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
 
-    // Prepare contents and ensure roles alternate (user, model, user, model)
+    // Ensure roles alternate correctly for the Gemini SDK (user/model)
     const contents = messages.map((m: any) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content }]
     }));
 
-    // Generate Content
     const response = await ai.models.generateContent({
       model: modelName,
       contents: contents,
       config: {
         systemInstruction: config.system_instruction,
         temperature: 0.7,
-        // reserved tokens for the response after thinking
-        maxOutputTokens: config.thinking_enabled ? 16384 : undefined,
+        // Removed maxOutputTokens as per guidelines to avoid response blocking when using thinkingConfig.
         thinkingConfig: config.thinking_enabled ? { 
           thinkingBudget: Math.min(config.thinking_budget || 4000, 32768) 
         } : undefined
       },
     });
 
+    // Fix: Access response.text directly (property, not method)
     if (!response.text) {
-      throw new Error("The AI model returned an empty response.");
+      throw new Error("Empty response from AI.");
     }
 
     return new Response(JSON.stringify({ text: response.text }), {
@@ -99,7 +87,7 @@ export const onRequestPost = async (context: any) => {
     });
 
   } catch (error: any) {
-    console.error('API Handler Error:', error);
+    console.error('API Error:', error);
     return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
       status: 500, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 

@@ -9,11 +9,11 @@ export const runAnsuryEngine = async (
   const env = (import.meta as any).env || {};
   const origin = window.location.origin;
   
-  // Cleanly construct the URL by removing trailing slash from base and leading slash from path
-  const baseUrl = (env.VITE_APP_URL || origin).replace(/\/$/, '');
-  const apiUrl = `${baseUrl}/api/chat`;
+  // Hardened URL construction
+  const baseUrlString = env.VITE_APP_URL || origin;
+  // Use URL constructor to handle slashes safely
+  const apiUrl = new URL('/api/chat', baseUrlString.replace(/\/$/, '')).toString();
 
-  // Standardize message format to send to backend
   const messages = [
     ...history.map(m => ({ role: m.role, content: m.content })),
     { role: 'user', content: prompt }
@@ -33,21 +33,18 @@ export const runAnsuryEngine = async (
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
       let errorMessage = `API Error: ${response.status}`;
       try {
-        const err = await response.json();
-        errorMessage = err.error || errorMessage;
+        const errJson = JSON.parse(errorText);
+        errorMessage = errJson.error || errorMessage;
       } catch (e) {
-        const text = await response.text();
-        if (text) errorMessage = text.substring(0, 100);
+        if (errorText) errorMessage = errorText.substring(0, 100);
       }
       throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    if (!data.text) {
-      throw new Error('Incomplete response from AI engine');
-    }
     return data.text;
   } catch (error: any) {
     console.error('Engine connection failed:', error);
