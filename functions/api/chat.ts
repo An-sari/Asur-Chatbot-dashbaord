@@ -5,28 +5,40 @@ import { createClient } from '@supabase/supabase-js';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
+  'Access-Control-Allow-Headers': 'Content-Type, x-api-key, Accept',
 };
 
-// Handle Preflight requests
 export const onRequestOptions = async () => {
   return new Response(null, { status: 204, headers: corsHeaders });
 };
 
 export const onRequestPost = async (context: any) => {
+  const { request, env } = context;
+
   try {
-    const { request, env } = context;
-    const { clientId, messages } = await request.json();
+    const body = await request.json();
+    const { clientId, messages } = body;
     const apiKeyHeader = request.headers.get('x-api-key');
 
-    // 1. Initialize Supabase
-    // Using env provided by Cloudflare context
-    const supabase = createClient(
-      env.NEXT_PUBLIC_SUPABASE_URL || env.VITE_SUPABASE_URL,
-      env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY
-    );
+    if (!clientId) {
+      return new Response(JSON.stringify({ error: 'Missing clientId' }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
 
-    // 2. Fetch Client Config
+    // Initialize Supabase using environment variables passed in context
+    // Cloudflare Pages Functions pass env vars through the context.env object
+    const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Supabase environment variables are missing on the server.");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Fetch Client Config
     const { data: config, error: configError } = await supabase
       .from('clients')
       .select('*')
@@ -34,51 +46,43 @@ export const onRequestPost = async (context: any) => {
       .single();
 
     if (configError || !config) {
-      console.error('Config fetch error:', configError);
-      return new Response(JSON.stringify({ error: 'Client configuration not found' }), { 
+      return new Response(JSON.stringify({ error: `Client configuration for '${clientId}' not found. Ensure the client exists in your database.` }), { 
         status: 404, 
-        headers: corsHeaders 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
-    // 3. Auth Validation
-    const origin = request.headers.get('origin');
-    if (!apiKeyHeader && config.authorized_origins?.[0] !== '*' && !config.authorized_origins?.includes(origin || '')) {
+    // Origin Validation
+    const originHeader = request.headers.get('origin');
+    const authorizedOrigins = config.authorized_origins || ['*'];
+    if (!apiKeyHeader && authorizedOrigins[0] !== '*' && !authorizedOrigins.includes(originHeader || '')) {
        return new Response(JSON.stringify({ error: 'Unauthorized access origin' }), { 
          status: 403, 
-         headers: corsHeaders 
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
        });
     }
 
-    // 4. Initialize Gemini
-    // CRITICAL: Cloudflare Pages environment variables are in env, not process.env
-    const geminiApiKey = env.API_KEY || process.env.API_KEY;
-    if (!geminiApiKey) {
-        return new Response(JSON.stringify({ error: 'API Key configuration missing on server' }), { 
-          status: 500, 
-          headers: corsHeaders 
-        });
-    }
-
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+    // Initialize Gemini following SDK Coding Guidelines strictly
+    // Use process.env.API_KEY directly (assumed to be shimmed or available)
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Use gemini-3-pro-preview for complex sales tasks or when thinking is enabled
+    // Model Selection based on configuration
     const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
 
-    // 5. Prepare Payload with correct role mapping
+    // Prepare contents and ensure roles alternate (user, model, user, model)
     const contents = messages.map((m: any) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
-      parts: [{ text: m.content || m.parts?.[0]?.text }]
+      parts: [{ text: m.content }]
     }));
 
-    // 6. Generate Content
+    // Generate Content
     const response = await ai.models.generateContent({
       model: modelName,
       contents: contents,
       config: {
         systemInstruction: config.system_instruction,
         temperature: 0.7,
-        // When setting thinkingBudget, maxOutputTokens MUST be set per guidelines
+        // reserved tokens for the response after thinking
         maxOutputTokens: config.thinking_enabled ? 16384 : undefined,
         thinkingConfig: config.thinking_enabled ? { 
           thinkingBudget: Math.min(config.thinking_budget || 4000, 32768) 
@@ -87,7 +91,7 @@ export const onRequestPost = async (context: any) => {
     });
 
     if (!response.text) {
-        throw new Error("Model failed to generate a text response.");
+      throw new Error("The AI model returned an empty response.");
     }
 
     return new Response(JSON.stringify({ text: response.text }), {
@@ -95,10 +99,10 @@ export const onRequestPost = async (context: any) => {
     });
 
   } catch (error: any) {
-    console.error('Pages Function Error:', error);
+    console.error('API Handler Error:', error);
     return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
       status: 500, 
-      headers: corsHeaders 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
-}
+};
