@@ -18,7 +18,6 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creationStep, setCreationStep] = useState<'input' | 'success'>('input');
   
-  // New Client Creation State
   const [newClientData, setNewClientData] = useState({
     name: '',
     greeting: 'Welcome. How may I assist your inquiry into our premium services today?',
@@ -48,7 +47,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
     setStats({
       totalLeads: leadCount || 0,
       activeAgents: clientCount || 0,
-      messagesProcessed: (leadCount || 0) * 14.2 // Simulated based on engagement
+      messagesProcessed: (leadCount || 0) * 14.2
     });
   };
 
@@ -63,7 +62,6 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   const handleCreateClient = async () => {
     if (!newClientData.name) return;
     
-    // Generate a secure unique ID that acts as the API Key
     const generatedId = `ansury-${newClientData.name.toLowerCase().replace(/\s+/g, '-')}-${Math.random().toString(36).substring(2, 7)}`;
     
     const payload: ClientConfig = {
@@ -130,7 +128,6 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
 
   return (
     <div className="flex-1 flex overflow-hidden bg-white">
-      {/* SIDEBAR */}
       <aside className="w-80 bg-slate-950 flex flex-col border-r border-slate-800">
         <div className="p-8 border-b border-slate-900 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -188,7 +185,6 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
         </div>
       </aside>
 
-      {/* CONTENT */}
       <main className="flex-1 overflow-y-auto bg-[#F9FAFB] relative scroll-smooth">
         <div className="max-w-6xl mx-auto p-12">
           
@@ -328,7 +324,6 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
         </div>
       </main>
 
-      {/* CREATE AGENT MODAL (THE WIZARD) */}
       {showCreateModal && (
         <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
            <div className="bg-white w-full max-w-2xl rounded-[4rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
