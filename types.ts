@@ -28,15 +28,13 @@ export interface Lead {
   client_id: string;
   name: string;
   email: string;
-  phone: string;
-  chat_transcript: any;
+  phone?: string;
+  chat_transcript: ChatMessage[];
   created_at: string;
 }
 
-export interface ApiKey {
-  id: string;
-  client_id: string;
-  key: string;
-  name: string;
-  created_at: string;
+export interface DashboardStats {
+  totalLeads: number;
+  activeAgents: number;
+  messagesProcessed: number;
 }
