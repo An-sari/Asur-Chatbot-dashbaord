@@ -1,4 +1,3 @@
-
 # 🦅 Ansury Systems - Master Setup
 
 Follow these steps to ensure the engine is fully operational.
@@ -8,13 +7,13 @@ Follow these steps to ensure the engine is fully operational.
 ## 🛠 Database Schema (Supabase) - MASTER REPAIR SCRIPT
 
 Paste this entire block into your Supabase **SQL Editor** and click **Run**. 
-*Note: This script safely adjusts types to resolve the "invalid input syntax for type uuid" error.*
+*Note: This script safely adjusts types to resolve the "invalid input syntax for type uuid" error and sets up the required tables.*
 
 ```sql
 -- 1. Create/Adjust Clients Table
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY, -- Custom slugs or IDs
-  user_id TEXT NOT NULL, -- Changed from UUID to TEXT to support 'user_123'
+  user_id TEXT NOT NULL, -- TEXT to support 'user_123'
   name TEXT NOT NULL,
   primary_color TEXT DEFAULT '#101827',
   greeting TEXT DEFAULT 'Greetings. How may we assist your inquiry?',
@@ -25,7 +24,7 @@ CREATE TABLE IF NOT EXISTS clients (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Force user_id to TEXT if it was previously UUID
+-- Safely force user_id to TEXT if it was previously UUID
 DO $$ 
 BEGIN 
     ALTER TABLE clients ALTER COLUMN user_id TYPE TEXT;
@@ -53,14 +52,17 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 -- 4. Enable Realtime
--- Execute this to allow the dashboard to update the widget instantly
-alter publication supabase_realtime add table clients;
+-- This allows the dashboard to update the widget instantly without refresh
+BEGIN;
+  DROP PUBLICATION IF EXISTS supabase_realtime;
+  CREATE PUBLICATION supabase_realtime FOR TABLE clients, leads;
+COMMIT;
 ```
 
 ---
 
 ## 🛠 Cloudflare Setup
-*   **API_KEY**: Set in Pages > Settings > Environment Variables.
+*   **API_KEY**: Set in Pages > Settings > Environment Variables (not VITE_ prefix).
 *   **VITE_SUPABASE_URL**: Set in Environment Variables.
 *   **VITE_SUPABASE_ANON_KEY**: Set in Environment Variables.
 
