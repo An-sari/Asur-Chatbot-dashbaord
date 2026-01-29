@@ -6,17 +6,21 @@ export interface ClientConfig {
   primary_color: string;
   greeting: string;
   system_instruction: string;
-  logo_url?: string;
+  thinking_enabled: boolean;
+  thinking_budget: number;
   authorized_origins: string[];
   created_at?: string;
 }
 
-export interface ApiKey {
-  id: string;
-  client_id: string;
-  key: string;
-  name: string;
-  created_at: string;
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'model' | 'system';
+  content: string;
+  isThinking?: boolean;
+}
+
+export interface ChatWidgetProps {
+  clientId: string;
+  configOverride?: Partial<ClientConfig>;
 }
 
 export interface Lead {
@@ -29,12 +33,10 @@ export interface Lead {
   created_at: string;
 }
 
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
-export interface ChatWidgetProps {
-  clientId: string;
-  configOverride?: Partial<ClientConfig>;
+export interface ApiKey {
+  id: string;
+  client_id: string;
+  key: string;
+  name: string;
+  created_at: string;
 }

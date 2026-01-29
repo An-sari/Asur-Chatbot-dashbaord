@@ -11,6 +11,9 @@ export const MOCK_CLIENTS: Record<string, ClientConfig> = {
     greeting: 'Welcome to Elite Estates. How can I assist you in finding your dream luxury property today?',
     // Fix: Using snake_case property name as defined in ClientConfig
     system_instruction: 'You are an elite sales concierge for a luxury real estate firm. Be sophisticated, professional, and focus on high-ticket property details. Always try to qualify the lead by asking about their budget or preferred location.',
+    // Added missing required thinking properties
+    thinking_enabled: true,
+    thinking_budget: 4000,
     // Fix: Using snake_case property name as defined in ClientConfig
     authorized_origins: ['*'],
   },
@@ -23,6 +26,9 @@ export const MOCK_CLIENTS: Record<string, ClientConfig> = {
     greeting: 'Hi there! Ready to supercharge your workflow with TechFlow?',
     // Fix: Using snake_case property name as defined in ClientConfig
     system_instruction: 'You are a helpful SaaS sales engineer. Focus on technical features, ROI, and ease of integration. Your goal is to get the user to book a demo.',
+    // Added missing required thinking properties
+    thinking_enabled: false,
+    thinking_budget: 0,
     // Fix: Using snake_case property name as defined in ClientConfig
     authorized_origins: ['localhost', 'ansury.systems'],
   }
@@ -37,6 +43,9 @@ export const DEFAULT_CONFIG: ClientConfig = {
   greeting: 'Hello! How can we help you today?',
   // Fix: Using snake_case property name as defined in ClientConfig
   system_instruction: 'You are a helpful AI assistant.',
+  // Added missing required thinking properties
+  thinking_enabled: false,
+  thinking_budget: 0,
   // Fix: Using snake_case property name as defined in ClientConfig
   authorized_origins: ['*'],
 };
