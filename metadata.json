@@ -3,6 +3,7 @@
   "description": "A high-ticket, multi-tenant AI chatbot widget system for sales automation and customer engagement.",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "geolocation"
   ]
 }

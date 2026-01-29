@@ -1,68 +1,78 @@
-# 🦅 Ansury Systems - Enterprise AI Sales Engine
+# 🦅 Ansury Systems - Enterprise Deployment
 
-A production-ready, multi-tenant sales system leveraging Gemini 3's "Thinking" capabilities.
+High-ticket AI Sales Engine powered by Gemini 3 Pro reasoning.
 
 ---
 
-## 🏗 High-Performance Stack
+## 🛠 Cloudflare Setup (Must Follow)
 
-### 1. Cloudflare R2 (Static Asset Delivery)
-We bundle the widget into a single JS file and host it on R2. This ensures 100% uptime and sub-50ms loading globally.
-- Bucket: `ansury-cdn`
-- File: `ansury-widget.umd.js`
-- Domain: `cdn.ansury.systems`
+### 1. Cloudflare Pages (Main App)
+*   **Repo**: Link your GitHub repository.
+*   **Build Command**: `npm run build`
+*   **Root Directory**: `/`
+*   **Output Directory**: `dist`
+*   **Variables** (Settings > Variables):
+    *   `API_KEY`: Your Gemini API Key.
+    *   `NEXT_PUBLIC_SUPABASE_URL`: From Supabase dashboard.
+    *   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: From Supabase dashboard.
 
-### 2. Cloudflare Workers (The Gatekeeper)
-The `loader.js` is served via a Worker to handle dynamic versioning and security checks.
+### 2. Cloudflare R2 (CDN)
+The widget is a single-file library. Uploading to R2 ensures zero-latency loading.
+*   Run `npm run build`.
+*   Take `dist/ansury-widget.umd.js` and upload to an R2 bucket named `ansury-cdn`.
+*   Enable a Custom Domain for your bucket (e.g., `cdn.ansury.systems`).
+
+### 3. Cloudflare Worker (The Dynamic Loader)
+Deploy this worker to handle the `<script>` tag logic elegantly. This allows you to update the widget without asking clients to update their sites.
 
 ```javascript
-// deploy this to workers.ansury.systems/loader.js
+// worker.js
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const clientId = url.searchParams.get('cid');
     
-    const script = `
-      (function() {
-        if (window.AnsuryInited) return;
-        window.AnsuryInited = true;
-        const root = document.createElement('div');
-        root.id = 'ansury-root';
-        document.body.appendChild(root);
-        const shadow = root.attachShadow({ mode: 'open' });
-        const s = document.createElement('script');
-        s.src = "https://cdn.ansury.systems/ansury-widget.umd.js";
-        s.onload = () => window.AnsuryWidget.mount(shadow, { clientId: "${clientId}" });
-        shadow.appendChild(s);
-      })();
-    `;
-    return new Response(script, { headers: { 'Content-Type': 'application/javascript' } });
+    const loaderCode = `
+(function() {
+  if (window.AnsuryLoaded) return;
+  window.AnsuryLoaded = true;
+  const container = document.createElement('div');
+  container.id = 'ansury-root';
+  document.body.appendChild(container);
+  const shadow = container.attachShadow({ mode: 'open' });
+  const script = document.createElement('script');
+  script.src = "https://cdn.ansury.systems/ansury-widget.umd.js";
+  script.onload = () => window.AnsuryWidget.mount(shadow, { clientId: "${clientId}" });
+  shadow.appendChild(script);
+})();`;
+
+    return new Response(loaderCode, {
+      headers: { 'Content-Type': 'application/javascript', 'Access-Control-Allow-Origin': '*' }
+    });
   }
 }
 ```
 
-### 3. Cloudflare Pages (Core Application)
-Hosts the `/dashboard` and `/api/chat` routes.
-- **Build Command**: `npm run build`
-- **Output Dir**: `dist`
-- **Env**: `API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`
-
 ---
 
-## ⚡ Production SQL (Supabase)
+## 🏗 Database Schema (Supabase)
+
+Execute in SQL Editor:
 
 ```sql
+-- Client Table
 CREATE TABLE clients (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  primary_color TEXT DEFAULT '#4F46E5',
-  greeting TEXT DEFAULT 'Hello',
-  system_instruction TEXT DEFAULT 'You are a sales pro.',
-  thinking_enabled BOOLEAN DEFAULT false,
-  thinking_budget INTEGER DEFAULT 2000,
+  primary_color TEXT DEFAULT '#101827',
+  greeting TEXT DEFAULT 'Greetings. How may we assist your inquiry?',
+  system_instruction TEXT NOT NULL,
+  thinking_enabled BOOLEAN DEFAULT true,
+  thinking_budget INTEGER DEFAULT 4000,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Leads Table
 CREATE TABLE leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id TEXT REFERENCES clients(id),
@@ -75,4 +85,4 @@ CREATE TABLE leads (
 
 ---
 
-*Architect: Senior Engineer | Ansury Systems 2025*
+*Architect: Senior Full-Stack Lead | Ansury 2025*
