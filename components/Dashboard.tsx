@@ -44,7 +44,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   }, [activeTab, selectedClient]);
 
   const fetchClients = async () => {
-    const { data } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+    if (error) console.error("Fetch clients error:", error);
     if (data && data.length > 0) {
       setClients(data);
       if (activeTab === 'overview' || !selectedClient.id) setSelectedClient(data[0]);
@@ -62,10 +63,12 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   };
 
   const fetchLeads = async () => {
-    const { data } = await supabase.from('leads')
+    if (!selectedClient?.id) return;
+    const { data, error } = await supabase.from('leads')
       .select('*')
       .eq('client_id', selectedClient.id)
       .order('created_at', { ascending: false });
+    if (error) console.error("Fetch leads error:", error);
     if (data) setLeads(data);
   };
 
@@ -76,7 +79,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
     
     const payload: ClientConfig = {
       id: generatedId,
-      user_id: 'user_123',
+      user_id: 'user_123', // This will now work because DB column is TEXT
       name: newClientData.name,
       primary_color: '#0F172A',
       greeting: newClientData.greeting,
@@ -92,8 +95,10 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
       setSelectedClient(payload);
       setCreationStep('success');
       onUpdate(payload);
+      fetchGlobalStats();
     } else {
-      alert(`Initialization failed: ${error.message}`);
+      console.error("Initialization failed details:", error);
+      alert(`Initialization failed: ${error.message}\n\nCheck console for details.`);
     }
   };
 
@@ -125,15 +130,21 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
     if (!error) {
       onUpdate(selectedClient);
       fetchClients();
+    } else {
+      alert(`Save failed: ${error.message}`);
     }
     setIsSaving(false);
   };
 
   const deleteClient = async (id: string) => {
     if (!confirm('Warning: This will permanently remove this agent and all associated leads. Proceed?')) return;
-    await supabase.from('clients').delete().eq('id', id);
-    fetchClients();
-    setActiveTab('overview');
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (!error) {
+      fetchClients();
+      setActiveTab('overview');
+    } else {
+      alert(`Delete failed: ${error.message}`);
+    }
   };
 
   return (

@@ -1,39 +1,20 @@
 
-# 🦅 Ansury Systems - Enterprise Deployment
+# 🦅 Ansury Systems - Master Setup
 
-High-ticket AI Sales Engine powered by Gemini 3 Pro reasoning.
+Follow these steps to ensure the engine is fully operational.
 
 ---
 
-## 🛠 Database Schema (Supabase) - REPAIR & UPGRADE
+## 🛠 Database Schema (Supabase) - MASTER REPAIR SCRIPT
 
-If you are seeing "column not found" errors, run this script in your Supabase SQL Editor. It will safely add missing columns without deleting your data.
+Paste this entire block into your Supabase **SQL Editor** and click **Run**. 
+*Note: This script safely adjusts types to resolve the "invalid input syntax for type uuid" error.*
 
 ```sql
--- 1. Upgrade Clients Table
-ALTER TABLE IF EXISTS clients 
-ADD COLUMN IF NOT EXISTS user_id TEXT,
-ADD COLUMN IF NOT EXISTS thinking_enabled BOOLEAN DEFAULT true,
-ADD COLUMN IF NOT EXISTS thinking_budget INTEGER DEFAULT 4000,
-ADD COLUMN IF NOT EXISTS authorized_origins TEXT[] DEFAULT ARRAY['*'];
-
--- 2. Upgrade Leads Table
--- Ensure ID is auto-generated to avoid 409 Conflict
-ALTER TABLE IF EXISTS leads 
-ALTER COLUMN id SET DEFAULT gen_random_uuid();
-
--- 3. Create API Keys Table (Optional but recommended for high-ticket)
-CREATE TABLE IF NOT EXISTS api_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
-  key TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 4. Verify/Re-create Clients Table if it doesn't exist
+-- 1. Create/Adjust Clients Table
 CREATE TABLE IF NOT EXISTS clients (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY, -- Custom slugs or IDs
+  user_id TEXT NOT NULL, -- Changed from UUID to TEXT to support 'user_123'
   name TEXT NOT NULL,
   primary_color TEXT DEFAULT '#101827',
   greeting TEXT DEFAULT 'Greetings. How may we assist your inquiry?',
@@ -43,6 +24,37 @@ CREATE TABLE IF NOT EXISTS clients (
   authorized_origins TEXT[] DEFAULT ARRAY['*'],
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Force user_id to TEXT if it was previously UUID
+DO $$ 
+BEGIN 
+    ALTER TABLE clients ALTER COLUMN user_id TYPE TEXT;
+EXCEPTION 
+    WHEN others THEN NULL; 
+END $$;
+
+-- 2. Create/Adjust Leads Table
+CREATE TABLE IF NOT EXISTS leads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Auto-gen to prevent 409 Conflict
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  chat_transcript JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Create API Keys Table
+CREATE TABLE IF NOT EXISTS api_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  key TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Enable Realtime
+-- Execute this to allow the dashboard to update the widget instantly
+alter publication supabase_realtime add table clients;
 ```
 
 ---
