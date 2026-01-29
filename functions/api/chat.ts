@@ -40,42 +40,45 @@ export const onRequestPost = async (context: any) => {
       });
     }
 
-    // 3. Simple Auth (Origin Check or API Key)
+    // 3. Auth Validation
     const origin = request.headers.get('origin');
     if (!apiKeyHeader && config.authorized_origins?.[0] !== '*' && !config.authorized_origins?.includes(origin || '')) {
-       return new Response(JSON.stringify({ error: 'Unauthorized origin' }), { 
+       return new Response(JSON.stringify({ error: 'Unauthorized access origin' }), { 
          status: 403, 
          headers: corsHeaders 
        });
     }
 
     // 4. Initialize Gemini
-    // Fix: Obtained API key exclusively from process.env.API_KEY as required by coding guidelines.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Use gemini-3-pro-preview for complex sales tasks or when thinking is enabled
     const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
 
-    // 5. Prepare Payload
-    const history = messages.slice(0, -1).map((m: any) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
+    // 5. Prepare Payload with correct role mapping
+    const contents = messages.map((m: any) => ({
+      role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
+      parts: [{ text: m.content || m.parts?.[0]?.text }]
     }));
-    const lastMessage = messages[messages.length - 1].content;
 
     // 6. Generate Content
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: [
-        ...history,
-        { role: 'user', parts: [{ text: lastMessage }] }
-      ],
+      contents: contents,
       config: {
         systemInstruction: config.system_instruction,
         temperature: 0.7,
-        thinkingConfig: config.thinking_enabled ? { thinkingBudget: config.thinking_budget || 2000 } : undefined
+        // When setting thinkingBudget, maxOutputTokens MUST be set per guidelines
+        maxOutputTokens: config.thinking_enabled ? 16384 : undefined,
+        thinkingConfig: config.thinking_enabled ? { 
+          thinkingBudget: Math.min(config.thinking_budget || 4000, 32768) 
+        } : undefined
       },
     });
 
-    // Fix: Access .text property directly (not a method) as per guidelines.
+    if (!response.text) {
+        throw new Error("Model failed to generate a text response.");
+    }
+
     return new Response(JSON.stringify({ text: response.text }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

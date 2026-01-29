@@ -44,24 +44,21 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
     if (!input.trim() || isTyping || showLeadForm) return;
 
     const userText = input;
+    const currentMessages = [...messages];
     setMessages(prev => [...prev, { role: 'user', content: userText }]);
     setInput('');
     setIsTyping(true);
 
-    const userCount = messages.filter(m => m.role === 'user').length + 1;
+    const userCount = currentMessages.filter(m => m.role === 'user').length + 1;
     if (userCount >= 3) setShowLeadForm(true);
 
     try {
-      const history = messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
-
-      const aiResponse = await runAnsuryEngine(userText, history, config);
+      // Pass the previous messages and the new prompt to the engine
+      const aiResponse = await runAnsuryEngine(userText, currentMessages, config);
       setMessages(prev => [...prev, { role: 'assistant', content: aiResponse || "I am processing your high-priority request." }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "An advisor will be with you shortly. Please provide your contact info." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `System Error: ${error.message || "An advisor will be with you shortly."}` }]);
     } finally {
       setIsTyping(false);
     }
@@ -181,9 +178,5 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
     </div>
   );
 };
-
-export function mount(element: HTMLElement, props: any) {
-  ReactDOM.createRoot(element).render(<ChatWidget {...props} />);
-}
 
 export default ChatWidget;

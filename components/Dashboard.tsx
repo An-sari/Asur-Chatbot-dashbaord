@@ -8,6 +8,16 @@ interface DashboardProps {
   onUpdate: (newConfig: ClientConfig) => void;
 }
 
+const InfoTooltip: React.FC<{ text: string }> = ({ text }) => (
+  <div className="relative group ml-2 inline-block">
+    <div className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500 cursor-help group-hover:bg-indigo-600 group-hover:text-white transition-colors">?</div>
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-3 bg-slate-900 text-white text-[10px] font-medium rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50 shadow-2xl border border-white/10 backdrop-blur-md">
+      {text}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+    </div>
+  </div>
+);
+
 const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'leads'>('overview');
   const [clients, setClients] = useState<ClientConfig[]>([]);
@@ -249,11 +259,17 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
                     <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">Visual Identity</h3>
                     <div className="grid grid-cols-2 gap-10">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Public Name</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                          Public Name
+                          <InfoTooltip text="The identifier displayed to your customers in the chat interface." />
+                        </label>
                         <input value={selectedClient.name} onChange={e => setSelectedClient({...selectedClient, name: e.target.value})} className="w-full bg-slate-50 border-slate-100 rounded-2xl p-5 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 transition-all outline-none" />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Theme HEX</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                          Theme HEX
+                          <InfoTooltip text="Customize the primary color to perfectly match your brand aesthetic." />
+                        </label>
                         <div className="flex items-center space-x-4">
                           <input type="color" value={selectedClient.primary_color} onChange={e => setSelectedClient({...selectedClient, primary_color: e.target.value})} className="w-16 h-16 rounded-2xl border-none p-1 bg-white shadow-inner cursor-pointer" />
                           <input value={selectedClient.primary_color} onChange={e => setSelectedClient({...selectedClient, primary_color: e.target.value})} className="flex-1 bg-slate-50 border-slate-100 rounded-2xl p-5 font-mono text-sm uppercase outline-none" />
@@ -265,20 +281,46 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
                   <div className="bg-white p-12 rounded-[3rem] border border-slate-200 shadow-sm space-y-8">
                     <div className="flex justify-between items-center">
                       <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">Intelligence Directives</h3>
-                      <div className="flex items-center space-x-2">
-                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thinking Mode</span>
-                         <button 
-                           onClick={() => setSelectedClient({...selectedClient, thinking_enabled: !selectedClient.thinking_enabled})}
-                           className={`w-12 h-6 rounded-full transition-all relative ${selectedClient.thinking_enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
-                         >
-                           <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${selectedClient.thinking_enabled ? 'left-7' : 'left-1'}`}></div>
-                         </button>
+                      <div className="flex items-center space-x-6">
+                         <div className="flex items-center space-x-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              Thinking Mode
+                              <InfoTooltip text="Enable deep reasoning for complex sales scripts. Requires Gemini 3 Pro." />
+                            </span>
+                            <button 
+                              onClick={() => setSelectedClient({...selectedClient, thinking_enabled: !selectedClient.thinking_enabled})}
+                              className={`w-12 h-6 rounded-full transition-all relative ${selectedClient.thinking_enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                            >
+                              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${selectedClient.thinking_enabled ? 'left-7' : 'left-1'}`}></div>
+                            </button>
+                         </div>
+                         
+                         {selectedClient.thinking_enabled && (
+                            <div className="flex items-center space-x-2 animate-in fade-in slide-in-from-left-2">
+                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                 Budget
+                                 <InfoTooltip text="Maximum reasoning tokens. Higher values (up to 32k) improve logic but increase latency." />
+                               </span>
+                               <input 
+                                 type="number" 
+                                 min="0" 
+                                 max="32768" 
+                                 step="1024"
+                                 value={selectedClient.thinking_budget} 
+                                 onChange={e => setSelectedClient({...selectedClient, thinking_budget: parseInt(e.target.value) || 0})}
+                                 className="w-24 bg-slate-50 border-slate-100 rounded-lg p-2 font-bold text-xs text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500" 
+                               />
+                            </div>
+                         )}
                       </div>
                     </div>
                     
                     <div className="space-y-6">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">System Instruction (The "Brain")</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                          System Instruction (The "Brain")
+                          <InfoTooltip text="The master persona. Define how the AI behaves, its knowledge limits, and specific conversion goals." />
+                        </label>
                         <textarea 
                           rows={10} 
                           value={selectedClient.system_instruction} 
