@@ -1,40 +1,46 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js';
+import cssInjectedByJsPlugin from 'vite-plugin-css-injected-js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Fix: Define __dirname for ESM environments as it is not globally available in ES modules.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Fix: Define __dirname for ESM context to resolve build errors
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [
-    react(),
-    cssInjectedByJsPlugin(), // This injects the Tailwind CSS directly into the JS bundle
-  ],
-  build: {
-    lib: {
-      entry: path.resolve(__dirname, 'components/ChatWidget.tsx'),
-      name: 'AnsuryWidget',
-      fileName: (format) => `ansury-widget.${format}.js`,
-      formats: ['umd'], // UMD is best for universal script tag compatibility
-    },
-    rollupOptions: {
-      // Ensure we don't bundle React if we want to use the host's, 
-      // but for a portable widget, we usually bundle everything.
-      // To keep it truly "copy-paste", we bundle React + GenAI SDK.
-      output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
+// This config builds the Dashboard/SPA by default for Cloudflare Pages.
+// To build the widget for R2, you would run: vite build --mode widget
+export default defineConfig(({ mode }) => {
+  const isWidget = mode === 'widget';
+
+  return {
+    plugins: [
+      react(),
+      cssInjectedByJsPlugin(),
+    ],
+    build: isWidget ? {
+      // Library build for R2
+      lib: {
+        entry: path.resolve(__dirname, 'components/ChatWidget.tsx'),
+        name: 'AnsuryWidget',
+        fileName: () => `ansury-widget.umd.js`,
+        formats: ['umd'],
+      },
+      outDir: 'dist-widget',
+      rollupOptions: {
+        output: {
+          globals: {
+            react: 'React',
+            'react-dom': 'ReactDOM',
+          },
         },
       },
+    } : {
+      // Standard SPA build for Cloudflare Pages
+      outDir: 'dist',
     },
-  },
-  define: {
-    'process.env': process.env,
-  },
+    define: {
+      'process.env': process.env,
+    },
+  };
 });
