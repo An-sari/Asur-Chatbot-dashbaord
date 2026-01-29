@@ -20,6 +20,7 @@ export const onRequestPost = async (context: any) => {
     const apiKeyHeader = request.headers.get('x-api-key');
 
     // 1. Initialize Supabase
+    // Using env provided by Cloudflare context
     const supabase = createClient(
       env.NEXT_PUBLIC_SUPABASE_URL || env.VITE_SUPABASE_URL,
       env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY
@@ -50,7 +51,17 @@ export const onRequestPost = async (context: any) => {
     }
 
     // 4. Initialize Gemini
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // CRITICAL: Cloudflare Pages environment variables are in env, not process.env
+    const geminiApiKey = env.API_KEY || process.env.API_KEY;
+    if (!geminiApiKey) {
+        return new Response(JSON.stringify({ error: 'API Key configuration missing on server' }), { 
+          status: 500, 
+          headers: corsHeaders 
+        });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+    
     // Use gemini-3-pro-preview for complex sales tasks or when thinking is enabled
     const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
 
@@ -85,7 +96,7 @@ export const onRequestPost = async (context: any) => {
 
   } catch (error: any) {
     console.error('Pages Function Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { 
+    return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
       status: 500, 
       headers: corsHeaders 
     });
