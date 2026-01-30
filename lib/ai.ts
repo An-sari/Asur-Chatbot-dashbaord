@@ -13,8 +13,8 @@ export const runAnsuryEngine = async (
   const env = (import.meta as any).env || {};
   const origin = window.location.origin;
   
-  const baseUrlString = env.VITE_APP_URL || origin;
-  const apiUrl = new URL('/api/chat', baseUrlString.replace(/\/$/, '')).toString();
+  // Try to use relative API path first for maximum compatibility
+  const apiUrl = '/api/chat';
 
   const messages = [
     ...history.map(m => ({ role: m.role, content: m.content })),
@@ -34,40 +34,33 @@ export const runAnsuryEngine = async (
       })
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      // Ansury High-Ticket Branded Error Handling
+      // Return the actual error message from the server if available
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       switch (response.status) {
         case 401:
-          throw new Error("Security verification failed. This domain is not authorized for the requested AI node.");
-        case 403:
-          throw new Error("Access denied. Please ensure your subscription or API key is active.");
+          throw new Error("Security verification failed. Invalid API credentials.");
         case 404:
-          throw new Error("Intelligence Node not found. The agent configuration may have been moved or deleted.");
+          throw new Error(`Intelligence Node '${config.id}' not found.`);
         case 429:
-          throw new Error("Priority traffic limit exceeded. Please wait a moment for the engine to clear its queue.");
+          throw new Error("Rate limit exceeded. Please wait a moment.");
         case 500:
-          throw new Error("Synthesizer offline. Our high-performance compute node is currently restarting.");
-        case 503:
-          throw new Error("The system is undergoing scheduled maintenance. Please return in a few minutes.");
-        default: {
-          const errorText = await response.text();
-          try {
-            const errJson = JSON.parse(errorText);
-            throw new Error(errJson.error || `System Latency (${response.status})`);
-          } catch (e) {
-            throw new Error(`Connection interrupted (${response.status}). Please verify your network link.`);
-          }
-        }
+          throw new Error("Internal Engine Error (500). Please check your environment variables.");
+        default:
+          throw new Error(`Engine Link Failure (${response.status})`);
       }
     }
 
-    const data = await response.json();
     return data.text;
   } catch (error: any) {
     console.error('Ansury Engine Link Failure:', error);
-    // If it's a native fetch error (like DNS or offline)
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error("Network connectivity lost. Unable to reach the Ansury intelligence backbone.");
+      throw new Error("Network error. Unable to reach the AI backbone.");
     }
     throw error;
   }
