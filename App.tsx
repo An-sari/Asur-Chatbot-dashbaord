@@ -23,13 +23,15 @@ const App: React.FC = () => {
 
     if (embedded === 'true') {
       setView('widget-only');
-      // Hide scrollbars on body for embedded mode
+      // Set body to transparent and no scroll for iframe
       document.body.style.overflow = 'hidden';
       document.body.style.background = 'transparent';
+      // Important for iframes to allow transparency
+      const html = document.documentElement;
+      html.style.background = 'transparent';
     }
   }, []);
 
-  // Simulated state for live updates from dashboard to widget
   const [liveConfig, setLiveConfig] = useState<ClientConfig>({
     id: 'ansury-lux-123',
     user_id: 'user_123',
@@ -42,20 +44,16 @@ const App: React.FC = () => {
     authorized_origins: ['*']
   });
 
-  // Render ONLY the widget if in embedded mode
   if (view === 'widget-only') {
     return (
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="pointer-events-auto">
-          <ChatWidget clientId={selectedClientId} />
-        </div>
+      <div className="h-screen w-screen bg-transparent overflow-hidden">
+        <ChatWidget clientId={selectedClientId} />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col h-screen">
-      {/* Navigation Header */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-50">
         <div className="flex items-center space-x-8">
           <div>
@@ -104,14 +102,11 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Content Area */}
       {view === 'preview' ? (
         <main className="flex-1 overflow-y-auto p-12">
           <div className="max-w-5xl mx-auto space-y-8">
             <div className="bg-white rounded-2xl p-16 shadow-xl border border-slate-200 relative overflow-hidden">
-               {/* Decorative background */}
               <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50"></div>
-              
               <div className="max-w-2xl space-y-8 relative z-10">
                 <span className="px-3 py-1 bg-slate-100 text-slate-500 text-xs font-bold rounded-full uppercase tracking-widest">Client Website Simulator</span>
                 <h2 className="text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
@@ -121,33 +116,9 @@ const App: React.FC = () => {
                   The Ansury widget below is currently acting as <strong className="text-slate-900">{MOCK_CLIENTS[selectedClientId].name}</strong>. 
                   Try changing the client in the header or switching to the Dashboard to see real-time updates.
                 </p>
-                <div className="flex space-x-4 pt-4">
-                  <button 
-                    className="px-8 py-4 rounded-xl text-white font-bold text-lg shadow-xl transform hover:translate-y-[-2px] transition-all"
-                    style={{ backgroundColor: MOCK_CLIENTS[selectedClientId].primary_color }}
-                  >
-                    Get Started Now
-                  </button>
-                  <button className="px-8 py-4 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-lg hover:bg-slate-50 transition-colors">
-                    View Portfolio
-                  </button>
-                </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-6">
-                     <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-3">Enterprise Feature {i}</h3>
-                  <p className="text-slate-500 leading-relaxed italic">"Ansury Systems revolutionized how we handle inbound luxury leads."</p>
-                </div>
-              ))}
-            </div>
           </div>
-          {/* The Actual Widget */}
           <ChatWidget clientId={selectedClientId} />
         </main>
       ) : (
@@ -156,7 +127,6 @@ const App: React.FC = () => {
           onUpdate={(cfg) => setLiveConfig(cfg)}
         />
       )}
-      
     </div>
   );
 };

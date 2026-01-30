@@ -11,11 +11,17 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [showLeadForm, setShowLeadForm] = useState(false);
-  const [leadInfo, setLeadInfo] = useState({ name: '', email: '', phone: '' });
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Handle cross-window communication for embedding
+  useEffect(() => {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: isOpen ? 'ansury-expand' : 'ansury-collapse' }, '*');
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -31,7 +37,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
           setConfig(data);
           setIsLive(true);
         } else {
-          // Fallback to local mock constants
           if (MOCK_CLIENTS[clientId]) {
             setConfig(MOCK_CLIENTS[clientId]);
             setIsLive(false);
@@ -74,10 +79,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
     setInput('');
     setIsTyping(true);
 
-    if (currentMessages.filter(m => m.role === 'user').length + 1 >= 3) {
-      setShowLeadForm(true);
-    }
-
     try {
       const aiResponse = await runAnsuryEngine(userText, currentMessages, activeConfig);
       setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
@@ -91,7 +92,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
   const displayConfig = config || MOCK_CLIENTS[clientId] || DEFAULT_CONFIG;
 
   return (
-    <div className="fixed bottom-8 right-8 z-[2147483647] font-sans">
+    <div className={`fixed bottom-4 right-4 z-[2147483647] font-sans transition-all duration-300 ${isOpen ? 'translate-y-0' : 'translate-y-0'}`}>
       {!isOpen ? (
         <button 
           onClick={() => setIsOpen(true)}
@@ -101,7 +102,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
         </button>
       ) : (
-        <div className="bg-white w-[400px] h-[650px] rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-300">
+        <div className="bg-white w-[380px] h-[600px] sm:w-[400px] sm:h-[650px] rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-300">
           <div className="p-8 text-white relative" style={{ backgroundColor: displayConfig.primary_color }}>
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-3">
@@ -156,13 +157,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
               </button>
             </form>
-            <div className="mt-4 flex justify-between items-center px-2">
-               <p className="text-[9px] text-slate-300 font-black uppercase tracking-[0.2em]">Ansury Titan v2.5</p>
-               <div className="flex items-center space-x-1 opacity-40">
-                 <span className="text-[8px] font-bold text-slate-400">POWERED BY GEMINI 3</span>
-                 <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
-               </div>
-            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 
 /**
- * Ansury Systems - Universal Smart Loader (Beta)
- * Embed this on your site to activate the AI Sales Engine.
+ * Ansury Systems - Universal Smart Loader
+ * Version: 2.1.0 (Production-Ready)
  */
 (function() {
   const script = document.currentScript;
@@ -12,7 +12,7 @@
     return;
   }
 
-  // Use the current script's origin as the base URL
+  // Determine the base URL from the script source
   const scriptUrl = new URL(script.src);
   const baseUrl = scriptUrl.origin;
 
@@ -22,18 +22,47 @@
   // Create the host container
   const container = document.createElement('div');
   container.id = 'ansury-container';
-  container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:2147483647;pointer-events:none;';
+  container.style.cssText = `
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    z-index: 2147483647;
+    width: 100px;
+    height: 100px;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    overflow: visible;
+  `;
   document.body.appendChild(container);
 
-  // We load the app in "widget-only" mode via a URL parameter
+  // Initialize the Iframe
   const iframe = document.createElement('iframe');
+  iframe.id = 'ansury-iframe';
   iframe.src = `${baseUrl}/?clientId=${clientId}&embedded=true`;
-  iframe.style.cssText = 'border:none;width:450px;height:750px;background:transparent;pointer-events:auto;';
+  iframe.style.cssText = `
+    border: none;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    pointer-events: auto;
+    color-scheme: light;
+  `;
   iframe.setAttribute('allow', 'camera; microphone; geolocation');
-  
-  // Optional: In a production version, the widget would send postMessage to resize this iframe
-  // between a small circle (collapsed) and large rectangle (expanded).
-  // For now, we set a large enough fixed size to hold the expanded widget.
-
   container.appendChild(iframe);
+
+  // Communicate with the Widget
+  window.addEventListener('message', (event) => {
+    // Basic security check (optional: verify origin)
+    if (event.origin !== baseUrl) return;
+
+    const { type } = event.data;
+
+    if (type === 'ansury-expand') {
+      container.style.width = '450px';
+      container.style.height = '850px';
+    } else if (type === 'ansury-collapse') {
+      container.style.width = '100px';
+      container.style.height = '100px';
+    }
+  });
 })();

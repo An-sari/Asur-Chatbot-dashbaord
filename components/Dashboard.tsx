@@ -27,7 +27,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creationStep, setCreationStep] = useState<'input' | 'success'>('input');
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   
+  // This should ideally be your Worker URL (e.g., https://loader.ansury.systems)
+  const [loaderBaseUrl, setLoaderBaseUrl] = useState(window.location.origin);
+
   const [newClientData, setNewClientData] = useState({
     name: '',
     greeting: 'Welcome. How may I assist your inquiry into our premium services today?',
@@ -79,7 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
     
     const payload: ClientConfig = {
       id: generatedId,
-      user_id: 'user_123', // This will now work because DB column is TEXT
+      user_id: 'user_123',
       name: newClientData.name,
       primary_color: '#0F172A',
       greeting: newClientData.greeting,
@@ -98,25 +102,27 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
       fetchGlobalStats();
     } else {
       console.error("Initialization failed details:", error);
-      alert(`Initialization failed: ${error.message}\n\nCheck console for details.`);
+      alert(`Initialization failed: ${error.message}`);
     }
   };
 
-  const applyTemplate = (type: 'coach' | 'ecommerce' | 'saas') => {
+  const applyTemplate = (type: 'real-estate' | 'saas' | 'consulting') => {
     const templates = {
-      coach: {
-        greeting: "Hello. I assist high-performers in scaling their impact. Are you ready to discuss your transformation?",
-        instruction: "You are a senior advisor for a $25k mastermind. Be direct, authoritative, and only offer the booking link if they confirm they have at least $5k to invest in growth."
+      'real-estate': {
+        greeting: "Welcome to our exclusive property portfolio. Are you looking for a primary residence or an investment opportunity today?",
+        instruction: "You are an elite real estate advisor for a luxury firm. Focus on exclusive amenities, architectural significance, and lifestyle. Qualify leads by asking for their preferred location and investment range ($2M+). Be sophisticated and patient."
       },
-      ecommerce: {
-        greeting: "Welcome to our luxury collection. How can I help you find the perfect piece for your home today?",
-        instruction: "You are a sophisticated retail concierge. Focus on craftsmanship, material quality, and heritage. Ask about their style preferences to recommend specific SKUs."
+      'saas': {
+        greeting: "Hi! Ready to streamline your operations? I can show you how our platform delivers 3x ROI in the first quarter.",
+        instruction: "You are a technical sales consultant for a high-growth SaaS platform. Focus on efficiency, integration capabilities, and measurable ROI. Ask about their current tech stack and team size to provide tailored value propositions. Your goal is to secure a live demo."
       },
-      saas: {
-        greeting: "Hi there! Looking to automate your sales pipeline? I can show you how we save teams 20+ hours a week.",
-        instruction: "You are a technical sales engineer. Focus on ROI, integration depth, and security. Qualify based on team size (minimum 10 seats required)."
+      'consulting': {
+        greeting: "Hello. I help businesses optimize their strategic growth. What is the biggest bottleneck in your operations right now?",
+        instruction: "You are a high-level strategic consultant. Be analytical, professional, and authoritative. Your goal is identify specific business pain points and suggest how a consultation can solve them. Qualify based on annual revenue and decision-making authority."
       }
     };
+    
+    setActiveTemplate(type);
     setNewClientData({
       ...newClientData,
       greeting: templates[type].greeting,
@@ -137,13 +143,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
   };
 
   const deleteClient = async (id: string) => {
-    if (!confirm('Warning: This will permanently remove this agent and all associated leads. Proceed?')) return;
+    if (!confirm('Warning: This will permanently remove this agent. Proceed?')) return;
     const { error } = await supabase.from('clients').delete().eq('id', id);
     if (!error) {
       fetchClients();
       setActiveTab('overview');
-    } else {
-      alert(`Delete failed: ${error.message}`);
     }
   };
 
@@ -172,7 +176,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
             <div className="px-4 mb-4 flex justify-between items-center">
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sales Agents</span>
               <button 
-                onClick={() => { setCreationStep('input'); setShowCreateModal(true); }} 
+                onClick={() => { setCreationStep('input'); setActiveTemplate(null); setShowCreateModal(true); }} 
                 className="text-indigo-400 hover:text-white p-1 bg-indigo-500/10 rounded-md transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -270,17 +274,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
                     <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">Visual Identity</h3>
                     <div className="grid grid-cols-2 gap-10">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                          Public Name
-                          <InfoTooltip text="The identifier displayed to your customers in the chat interface." />
-                        </label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Public Name</label>
                         <input value={selectedClient.name} onChange={e => setSelectedClient({...selectedClient, name: e.target.value})} className="w-full bg-slate-50 border-slate-100 rounded-2xl p-5 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 transition-all outline-none" />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                          Theme HEX
-                          <InfoTooltip text="Customize the primary color to perfectly match your brand aesthetic." />
-                        </label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Theme HEX</label>
                         <div className="flex items-center space-x-4">
                           <input type="color" value={selectedClient.primary_color} onChange={e => setSelectedClient({...selectedClient, primary_color: e.target.value})} className="w-16 h-16 rounded-2xl border-none p-1 bg-white shadow-inner cursor-pointer" />
                           <input value={selectedClient.primary_color} onChange={e => setSelectedClient({...selectedClient, primary_color: e.target.value})} className="flex-1 bg-slate-50 border-slate-100 rounded-2xl p-5 font-mono text-sm uppercase outline-none" />
@@ -294,10 +292,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
                       <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">Intelligence Directives</h3>
                       <div className="flex items-center space-x-6">
                          <div className="flex items-center space-x-2">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                              Thinking Mode
-                              <InfoTooltip text="Enable deep reasoning for complex sales scripts. Requires Gemini 3 Pro." />
-                            </span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thinking Mode</span>
                             <button 
                               onClick={() => setSelectedClient({...selectedClient, thinking_enabled: !selectedClient.thinking_enabled})}
                               className={`w-12 h-6 rounded-full transition-all relative ${selectedClient.thinking_enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
@@ -305,33 +300,12 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
                               <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${selectedClient.thinking_enabled ? 'left-7' : 'left-1'}`}></div>
                             </button>
                          </div>
-                         
-                         {selectedClient.thinking_enabled && (
-                            <div className="flex items-center space-x-2 animate-in fade-in slide-in-from-left-2">
-                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                 Budget
-                                 <InfoTooltip text="Maximum reasoning tokens. Higher values (up to 32k) improve logic but increase latency." />
-                               </span>
-                               <input 
-                                 type="number" 
-                                 min="0" 
-                                 max="32768" 
-                                 step="1024"
-                                 value={selectedClient.thinking_budget} 
-                                 onChange={e => setSelectedClient({...selectedClient, thinking_budget: parseInt(e.target.value) || 0})}
-                                 className="w-24 bg-slate-50 border-slate-100 rounded-lg p-2 font-bold text-xs text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500" 
-                               />
-                            </div>
-                         )}
                       </div>
                     </div>
                     
                     <div className="space-y-6">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                          System Instruction (The "Brain")
-                          <InfoTooltip text="The master persona. Define how the AI behaves, its knowledge limits, and specific conversion goals." />
-                        </label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">System Instruction (The "Brain")</label>
                         <textarea 
                           rows={10} 
                           value={selectedClient.system_instruction} 
@@ -349,9 +323,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
                       <div className="h-[500px] bg-[#F8FAFC] rounded-[2.5rem] overflow-hidden flex flex-col">
                         <div className="p-8 text-white" style={{ backgroundColor: selectedClient.primary_color }}>
                            <div className="flex items-center space-x-3">
-                             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black">
-                               {selectedClient.name.charAt(0)}
-                             </div>
+                             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black">{selectedClient.name.charAt(0)}</div>
                              <p className="font-black text-sm">{selectedClient.name}</p>
                            </div>
                         </div>
@@ -365,7 +337,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
 
                    <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl">
                       <h4 className="font-black text-xl mb-3">Deployment Hub</h4>
-                      <p className="text-xs text-indigo-100 leading-relaxed mb-6">Use this identifier in your website loader to activate this specific configuration.</p>
+                      <p className="text-xs text-indigo-100 leading-relaxed mb-6">Embed this ID in your loader to connect.</p>
                       <div className="bg-indigo-900/30 p-4 rounded-xl border border-indigo-400/30 font-mono text-sm break-all select-all">
                         {selectedClient.id}
                       </div>
@@ -381,91 +353,77 @@ const Dashboard: React.FC<DashboardProps> = ({ initialConfig, onUpdate }) => {
         <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
            <div className="bg-white w-full max-w-2xl rounded-[4rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
               {creationStep === 'input' ? (
-                <div className="p-16 space-y-10">
+                <div className="p-12 space-y-8 overflow-y-auto max-h-[90vh]">
                   <div className="space-y-3 text-center">
-                    <h3 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic">Architect Node</h3>
-                    <p className="text-slate-500 font-medium">Define the core intelligence of your next high-ticket sales machine.</p>
+                    <h3 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Initialize Sales Node</h3>
+                    <p className="text-slate-500 font-medium">Select a blueprint or build from zero.</p>
                   </div>
 
-                  <div className="flex justify-center space-x-3">
-                    <button onClick={() => applyTemplate('coach')} className="px-5 py-2 rounded-full border border-slate-200 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors">Mastermind Template</button>
-                    <button onClick={() => applyTemplate('ecommerce')} className="px-5 py-2 rounded-full border border-slate-200 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors">Luxury Retail</button>
-                    <button onClick={() => applyTemplate('saas')} className="px-5 py-2 rounded-full border border-slate-200 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors">SaaS Scale</button>
+                  <div className="space-y-4">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Industry Blueprints</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <button onClick={() => applyTemplate('real-estate')} className={`p-4 rounded-2xl border transition-all text-left flex flex-col space-y-2 group ${activeTemplate === 'real-estate' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-slate-50'}`}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg bg-slate-200">🏠</div>
+                        <span className="text-[11px] font-black uppercase text-slate-900">Real Estate</span>
+                      </button>
+                      <button onClick={() => applyTemplate('saas')} className={`p-4 rounded-2xl border transition-all text-left flex flex-col space-y-2 group ${activeTemplate === 'saas' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-slate-50'}`}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg bg-slate-200">⚡</div>
+                        <span className="text-[11px] font-black uppercase text-slate-900">SaaS Growth</span>
+                      </button>
+                      <button onClick={() => applyTemplate('consulting')} className={`p-4 rounded-2xl border transition-all text-left flex flex-col space-y-2 group ${activeTemplate === 'consulting' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 bg-slate-50'}`}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg bg-slate-200">🏛️</div>
+                        <span className="text-[11px] font-black uppercase text-slate-900">Consulting</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-6">
+                  <div className="space-y-5">
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Agent Name</label>
-                      <input 
-                        autoFocus
-                        value={newClientData.name} 
-                        onChange={e => setNewClientData({...newClientData, name: e.target.value})}
-                        placeholder="e.g. Zenith Consulting AI"
-                        className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600 transition-all outline-none"
-                      />
+                      <input value={newClientData.name} onChange={e => setNewClientData({...newClientData, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 font-bold outline-none" placeholder="e.g. Titan Sales" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Primary Greeting</label>
-                      <input 
-                        value={newClientData.greeting} 
-                        onChange={e => setNewClientData({...newClientData, greeting: e.target.value})}
-                        className="w-full bg-slate-50 border-none rounded-2xl p-6 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600 transition-all outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Intelligence Directive</label>
-                      <textarea 
-                        rows={4}
-                        value={newClientData.instruction} 
-                        onChange={e => setNewClientData({...newClientData, instruction: e.target.value})}
-                        className="w-full bg-slate-50 border-none rounded-3xl p-6 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600 transition-all outline-none leading-relaxed"
-                      />
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Greeting</label>
+                      <input value={newClientData.greeting} onChange={e => setNewClientData({...newClientData, greeting: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 font-bold outline-none" />
                     </div>
                   </div>
 
-                  <div className="flex space-x-4 pt-6">
-                    <button onClick={() => setShowCreateModal(false)} className="flex-1 py-6 rounded-3xl font-black uppercase text-xs tracking-widest text-slate-400 hover:bg-slate-50 transition-all">Abort</button>
-                    <button 
-                      onClick={handleCreateClient} 
-                      disabled={!newClientData.name} 
-                      className="flex-1 bg-slate-900 text-white py-6 rounded-3xl font-black uppercase text-xs tracking-[0.2em] shadow-2xl hover:bg-indigo-600 transition-all disabled:opacity-20"
-                    >
-                      Initialize Node
-                    </button>
+                  <div className="flex space-x-4">
+                    <button onClick={() => setShowCreateModal(false)} className="flex-1 py-5 font-black uppercase text-xs text-slate-400">Abort</button>
+                    <button onClick={handleCreateClient} disabled={!newClientData.name} className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-2xl disabled:opacity-20">Initialize Node</button>
                   </div>
                 </div>
               ) : (
-                <div className="p-20 text-center space-y-10 bg-white relative overflow-hidden">
-                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px]"></div>
-                  
-                  <div className="w-24 h-24 bg-indigo-600 text-white rounded-full flex items-center justify-center mx-auto shadow-2xl shadow-indigo-500/40 animate-bounce">
+                <div className="p-20 text-center space-y-10 bg-white relative">
+                  <div className="w-24 h-24 bg-indigo-600 text-white rounded-full flex items-center justify-center mx-auto shadow-2xl">
                     <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
                   </div>
                   
-                  <div className="space-y-4">
-                    <h3 className="text-5xl font-black text-slate-900 tracking-tighter uppercase italic">Deployment Ready</h3>
-                    <p className="text-slate-500 font-medium">Your specialized sales intelligence has been successfully synthesized.</p>
+                  <div className="space-y-2">
+                    <h3 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Node Live</h3>
+                    <p className="text-slate-500 font-medium">Configure your loader to begin capturing leads.</p>
                   </div>
 
                   <div className="space-y-6 text-left max-w-md mx-auto">
-                    <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 shadow-inner">
-                       <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Unique Deployment ID (API KEY)</p>
-                       <code className="text-indigo-600 font-black text-xl break-all select-all block leading-tight">{selectedClient.id}</code>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">1. Your Public Loader URL (Worker URL)</label>
+                      <input 
+                        type="text" 
+                        value={loaderBaseUrl} 
+                        onChange={(e) => setLoaderBaseUrl(e.target.value)}
+                        placeholder="https://loader.your-site.com"
+                        className="w-full bg-slate-100 p-4 rounded-xl text-sm font-mono border-none outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
                     </div>
                     <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
-                       <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mb-4">Universal Embed script</p>
+                       <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mb-4">Paste this into your HTML</p>
                        <code className="text-slate-300 text-xs break-all leading-relaxed block select-all font-mono">
-                         &lt;script src="https://ansury.systems/loader.js" data-client-id="{selectedClient.id}"&gt;&lt;/script&gt;
+                         &lt;script src="{loaderBaseUrl}/loader.js" data-client-id="{selectedClient.id}"&gt;&lt;/script&gt;
                        </code>
                     </div>
                   </div>
 
-                  <button 
-                    onClick={() => { setShowCreateModal(false); setActiveTab('settings'); }} 
-                    className="w-full bg-slate-900 text-white py-8 rounded-[2rem] font-black uppercase tracking-[0.3em] text-sm shadow-2xl hover:bg-indigo-600 transition-all"
-                  >
-                    Enter Command Center
-                  </button>
+                  <button onClick={() => { setShowCreateModal(false); setActiveTab('settings'); }} className="w-full bg-slate-900 text-white py-8 rounded-[2rem] font-black uppercase tracking-[0.3em] text-sm">Open Command Center</button>
                 </div>
               )}
            </div>
