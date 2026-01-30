@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ChatWidget from './components/ChatWidget';
 import Dashboard from './components/Dashboard';
 import { MOCK_CLIENTS } from './constants';
@@ -7,9 +7,27 @@ import { ClientConfig } from './types';
 import { useAuth } from './lib/auth';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'preview' | 'dashboard'>('preview');
+  const [view, setView] = useState<'preview' | 'dashboard' | 'widget-only'>('preview');
   const [selectedClientId, setSelectedClientId] = useState<string>('ansury-lux-123');
   const auth = useAuth();
+
+  // Handle URL parameters for embedding and client selection
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const clientId = params.get('clientId');
+    const embedded = params.get('embedded');
+
+    if (clientId) {
+      setSelectedClientId(clientId);
+    }
+
+    if (embedded === 'true') {
+      setView('widget-only');
+      // Hide scrollbars on body for embedded mode
+      document.body.style.overflow = 'hidden';
+      document.body.style.background = 'transparent';
+    }
+  }, []);
 
   // Simulated state for live updates from dashboard to widget
   const [liveConfig, setLiveConfig] = useState<ClientConfig>({
@@ -19,8 +37,21 @@ const App: React.FC = () => {
     primary_color: '#B8860B',
     greeting: 'Welcome to Elite Estates. How can I assist you?',
     system_instruction: 'You are an elite sales concierge...',
+    thinking_enabled: true,
+    thinking_budget: 4000,
     authorized_origins: ['*']
   });
+
+  // Render ONLY the widget if in embedded mode
+  if (view === 'widget-only') {
+    return (
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="pointer-events-auto">
+          <ChatWidget clientId={selectedClientId} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col h-screen">
@@ -93,7 +124,6 @@ const App: React.FC = () => {
                 <div className="flex space-x-4 pt-4">
                   <button 
                     className="px-8 py-4 rounded-xl text-white font-bold text-lg shadow-xl transform hover:translate-y-[-2px] transition-all"
-                    // Fix: Access primary_color instead of primaryColor
                     style={{ backgroundColor: MOCK_CLIENTS[selectedClientId].primary_color }}
                   >
                     Get Started Now

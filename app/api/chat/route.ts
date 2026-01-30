@@ -1,66 +1,99 @@
 
 import { GoogleGenAI } from '@google/genai';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../../lib/supabase';
+
+// Hardcoded fallbacks for testing/demo purposes
+const MOCK_BACKEND_CONFIGS: Record<string, any> = {
+  'ansury-lux-123': {
+    name: 'Elite Estates AI',
+    system_instruction: 'You are an elite sales concierge for a luxury real estate firm. Be sophisticated, professional, and focus on high-ticket property details. Always try to qualify the lead by asking about their budget or preferred location.',
+    thinking_enabled: true,
+    thinking_budget: 4000
+  },
+  'ansury-saas-456': {
+    name: 'TechFlow Assistant',
+    system_instruction: 'You are a helpful SaaS sales engineer. Focus on technical features, ROI, and ease of integration. Your goal is to get the user to book a demo.',
+    thinking_enabled: false,
+    thinking_budget: 0
+  }
+};
 
 export async function POST(req: Request) {
   try {
     const { clientId, messages } = await req.json();
     const apiKeyHeader = req.headers.get('x-api-key');
 
-    // 1. Fetch Client Config from Supabase
-    const { data: config, error: configError } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', clientId)
-      .single();
+    let config = null;
 
-    if (configError || !config) {
-      console.error('Supabase config fetch error:', configError);
-      return new Response('Client configuration not found', { status: 404 });
-    }
-
-    // 2. Authentication: Check API Key if present, otherwise fallback to Origin check
-    // In a high-ticket system, we prefer explicit API keys.
-    if (apiKeyHeader) {
-      const { data: keyRecord, error: keyError } = await supabase
-        .from('api_keys')
+    // 1. Try to fetch from Supabase
+    try {
+      const { data, error } = await supabase
+        .from('clients')
         .select('*')
-        .eq('client_id', clientId)
-        .eq('key', apiKeyHeader)
+        .eq('id', clientId)
         .single();
-
-      if (keyError || !keyRecord) {
-        return new Response('Invalid API Key', { status: 401 });
+      
+      if (data && !error) {
+        config = data;
       }
-    } else {
-      // Basic security: Validate Origin if no API key is provided
-      const origin = req.headers.get('origin');
-      const authorizedOrigins = config.authorized_origins || ['*'];
-      if (authorizedOrigins[0] !== '*' && !authorizedOrigins.includes(origin || '')) {
-        return new Response('Unauthorized Access. Provide an API key or use an authorized origin.', { status: 403 });
+    } catch (err) {
+      console.warn('Supabase fetch failed, checking demo cache...');
+    }
+
+    // 2. Fallback to mock for demo purposes
+    if (!config) {
+      config = MOCK_BACKEND_CONFIGS[clientId];
+    }
+
+    if (!config) {
+      return new Response(JSON.stringify({ error: `Intelligence Node '${clientId}' not found.` }), { 
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // 3. Authentication check (Skip for mock IDs)
+    if (!MOCK_BACKEND_CONFIGS[clientId]) {
+      if (apiKeyHeader) {
+        const { data: keyRecord } = await supabase
+          .from('api_keys')
+          .select('*')
+          .eq('client_id', clientId)
+          .eq('key', apiKeyHeader)
+          .single();
+
+        if (!keyRecord) {
+          return new Response('Invalid API Key', { status: 401 });
+        }
+      } else {
+        const origin = req.headers.get('origin');
+        const authorizedOrigins = config.authorized_origins || ['*'];
+        if (authorizedOrigins[0] !== '*' && !authorizedOrigins.includes(origin || '')) {
+          return new Response('Unauthorized Access.', { status: 403 });
+        }
       }
     }
 
-    // 3. Initialize Gemini
+    // 4. Initialize Gemini (Correct SDK pattern)
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // 4. Prepare Chat Context
-    const history = messages.slice(0, -1).map((m: any) => ({
-      role: m.role === 'assistant' ? 'model' : m.role,
+    const contents = messages.map((m: any) => ({
+      role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content }]
     }));
-    const lastMessage = messages[messages.length - 1].content;
 
-    // 5. Generate Content
+    // Choose model based on capability
+    const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [
-        ...history,
-        { role: 'user', parts: [{ text: lastMessage }] }
-      ],
+      model: modelName,
+      contents: contents,
       config: {
         systemInstruction: config.system_instruction,
         temperature: 0.7,
+        thinkingConfig: config.thinking_enabled ? { 
+          thinkingBudget: Math.min(config.thinking_budget || 4000, 32768) 
+        } : undefined
       },
     });
 
@@ -68,8 +101,11 @@ export async function POST(req: Request) {
       headers: { 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error:', error);
-    return new Response('Internal Server Error', { status: 500 });
+    return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
