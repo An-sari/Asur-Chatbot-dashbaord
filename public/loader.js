@@ -1,7 +1,7 @@
 
 /**
- * Ansury Systems - Universal Smart Loader
- * This script is the entry point for all client websites.
+ * Ansury Systems - Universal Smart Loader (Beta)
+ * Embed this on your site to activate the AI Sales Engine.
  */
 (function() {
   const script = document.currentScript;
@@ -12,6 +12,10 @@
     return;
   }
 
+  // Use the current script's origin as the base URL
+  const scriptUrl = new URL(script.src);
+  const baseUrl = scriptUrl.origin;
+
   // Prevent multiple instances
   if (document.getElementById('ansury-container')) return;
 
@@ -21,27 +25,18 @@
   container.style.cssText = 'position:fixed;bottom:0;right:0;z-index:2147483647;';
   document.body.appendChild(container);
 
-  // Attach Shadow DOM for style isolation
-  const shadow = container.attachShadow({ mode: 'open' });
-
-  // Create the mount point for React
-  const root = document.createElement('div');
-  root.id = 'ansury-widget-root';
-  shadow.appendChild(root);
-
-  // Load the bundled widget from CDN (Cloudflare R2/Pages)
-  const widgetScript = document.createElement('script');
-  // Replace with your production CDN URL
-  widgetScript.src = "https://cdn.ansury.systems/assets/ansury-widget.umd.js";
+  // For testing in this environment, we inject an iframe or load the component directly
+  // Note: Real production loaders usually pull a standalone UMD bundle
+  const iframe = document.createElement('iframe');
+  iframe.src = `${baseUrl}/?clientId=${clientId}&embedded=true`;
+  iframe.style.cssText = 'border:none;width:500px;height:800px;position:fixed;bottom:0;right:0;background:transparent;';
   
-  widgetScript.onload = () => {
-    // We assume the bundled widget exposes a global 'Ansury' object
-    if (window.AnsuryWidget && typeof window.AnsuryWidget.mount === 'function') {
-      window.AnsuryWidget.mount(root, { clientId });
-    } else {
-      console.error('Ansury Systems: Widget failed to initialize.');
+  // Handle widget expansion/collapse messages from within the iframe
+  window.addEventListener('message', (event) => {
+    if (event.data === 'ansury-toggle') {
+      // Logic for resizing iframe based on open/closed state
     }
-  };
+  });
 
-  shadow.appendChild(widgetScript);
+  container.appendChild(iframe);
 })();

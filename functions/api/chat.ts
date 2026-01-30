@@ -8,16 +8,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, x-api-key, Accept',
 };
 
+// Hardcoded fallbacks for testing/demo purposes
+const MOCK_BACKEND_CONFIGS: Record<string, any> = {
+  'ansury-lux-123': {
+    name: 'Elite Estates AI',
+    system_instruction: 'You are an elite sales concierge for a luxury real estate firm. Be sophisticated, professional, and focus on high-ticket property details. Always try to qualify the lead by asking about their budget or preferred location.',
+    thinking_enabled: true,
+    thinking_budget: 4000
+  },
+  'ansury-saas-456': {
+    name: 'TechFlow Assistant',
+    system_instruction: 'You are a helpful SaaS sales engineer. Focus on technical features, ROI, and ease of integration. Your goal is to get the user to book a demo.',
+    thinking_enabled: false,
+    thinking_budget: 0
+  }
+};
+
 export const onRequestOptions = async () => {
   return new Response(null, { status: 204, headers: corsHeaders });
 };
 
 export const onRequestPost = async (context: any) => {
   const { request, env } = context;
-
-  // Fix: Removed manual process.env bridging to resolve "Property 'process' does not exist on type 'typeof globalThis'"
-  // Following @google/genai guideline: "Do not define process.env".
-  // Assume process.env.API_KEY is pre-configured and accessible in the execution context.
 
   try {
     const body = await request.json();
@@ -33,32 +45,45 @@ export const onRequestPost = async (context: any) => {
     const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!supabaseUrl || !supabaseKey) {
-        throw new Error("Supabase environment variables are missing on the server.");
+    let config = null;
+
+    // 1. Try to fetch from Supabase
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { data, error } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', clientId)
+          .single();
+        
+        if (data && !error) {
+          config = data;
+        }
+      } catch (dbError) {
+        console.error('Database connection failed, checking mocks...');
+      }
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // 2. If not in DB, check hardcoded mocks for demo purposes
+    if (!config) {
+      config = MOCK_BACKEND_CONFIGS[clientId];
+    }
 
-    const { data: config, error: configError } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', clientId)
-      .single();
-
-    if (configError || !config) {
-      return new Response(JSON.stringify({ error: `Configuration for '${clientId}' not found. Verify record in Supabase.` }), { 
+    // 3. If still nothing, throw 404
+    if (!config) {
+      return new Response(JSON.stringify({ error: `Intelligence Node '${clientId}' not found in Database or Demo Cache.` }), { 
         status: 404, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
-    // Fix: Initialize Gemini using mandated pattern
-    // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // 4. Initialize Gemini (Mandated Pattern)
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
+    // Select model based on thinking requirement
     const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
 
-    // Ensure roles alternate correctly for the Gemini SDK (user/model)
     const contents = messages.map((m: any) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content }]
@@ -70,16 +95,14 @@ export const onRequestPost = async (context: any) => {
       config: {
         systemInstruction: config.system_instruction,
         temperature: 0.7,
-        // Removed maxOutputTokens as per guidelines to avoid response blocking when using thinkingConfig.
         thinkingConfig: config.thinking_enabled ? { 
           thinkingBudget: Math.min(config.thinking_budget || 4000, 32768) 
         } : undefined
       },
     });
 
-    // Fix: Access response.text directly (property, not method)
     if (!response.text) {
-      throw new Error("Empty response from AI.");
+      throw new Error("Empty response from AI engine.");
     }
 
     return new Response(JSON.stringify({ text: response.text }), {
@@ -87,7 +110,7 @@ export const onRequestPost = async (context: any) => {
     });
 
   } catch (error: any) {
-    console.error('API Error:', error);
+    console.error('API Engine Error:', error);
     return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), { 
       status: 500, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 

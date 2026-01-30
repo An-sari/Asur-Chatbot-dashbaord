@@ -13,6 +13,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadInfo, setLeadInfo] = useState({ name: '', email: '', phone: '' });
   const [config, setConfig] = useState<ClientConfig | null>(null);
+  const [isLive, setIsLive] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -20,62 +21,42 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
     const fetchConfig = async () => {
       setLoadError(null);
       try {
-        // Attempt to fetch from Supabase
         const { data, error } = await supabase
           .from('clients')
           .select('*')
           .eq('id', clientId)
           .single();
 
-        if (data) {
+        if (data && !error) {
           setConfig(data);
+          setIsLive(true);
         } else {
-          // If not in DB, check if we have a local mock for this ID
+          // Fallback to local mock constants
           if (MOCK_CLIENTS[clientId]) {
-            console.log(`Using local mock for ${clientId}`);
             setConfig(MOCK_CLIENTS[clientId]);
+            setIsLive(false);
           } else {
-            console.warn('Config not found in DB or Mocks:', clientId);
-            setLoadError(`Node '${clientId}' is not yet initialized.`);
+            setLoadError(`Node '${clientId}' not initialized.`);
           }
         }
       } catch (err: any) {
-        console.error('Supabase fetch failed (likely 406/connection):', err);
-        // Fallback to mock even on network error
         if (MOCK_CLIENTS[clientId]) {
           setConfig(MOCK_CLIENTS[clientId]);
+          setIsLive(false);
         } else {
-          setLoadError('Database sync failed. Please check your Supabase keys.');
+          setLoadError('Database sync offline.');
         }
       }
     };
 
     fetchConfig();
-
-    // Listen for live updates if DB is working
-    const channel = supabase.channel(`live-${clientId}`)
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'clients', 
-        filter: `id=eq.${clientId}` 
-      }, 
-      (payload) => setConfig(payload.new as any))
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [clientId]);
 
   useEffect(() => {
     if (config) {
       setMessages([{ role: 'assistant', content: config.greeting }]);
-    } else if (loadError) {
-      setMessages([{ 
-        role: 'assistant', 
-        content: `⚠️ ${loadError} To activate this agent, go to the Dashboard and click "Initialize Node".` 
-      }]);
     }
-  }, [config, loadError]);
+  }, [config]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -85,154 +66,104 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ clientId }) => {
     e.preventDefault();
     if (!input.trim() || isTyping || showLeadForm) return;
     
-    // Use config if available, fallback to default only as a last resort
     const activeConfig = config || DEFAULT_CONFIG;
-
     const userText = input;
     const currentMessages = [...messages];
+    
     setMessages(prev => [...prev, { role: 'user', content: userText }]);
     setInput('');
     setIsTyping(true);
 
-    const userCount = currentMessages.filter(m => m.role === 'user').length + 1;
-    if (userCount >= 3) setShowLeadForm(true);
+    if (currentMessages.filter(m => m.role === 'user').length + 1 >= 3) {
+      setShowLeadForm(true);
+    }
 
     try {
       const aiResponse = await runAnsuryEngine(userText, currentMessages, activeConfig);
-      setMessages(prev => [...prev, { role: 'assistant', content: aiResponse || "I am analyzing your request with high priority." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
     } catch (error: any) {
-      console.error(error);
-      // Removed generic 'Engine Error' prefix and added custom fallback
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: error.message || "System error. The intelligence node is temporarily recalibrating." 
-      }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: error.message }]);
     } finally {
       setIsTyping(false);
-    }
-  };
-
-  const submitLead = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { error } = await supabase.from('leads').insert({
-        client_id: clientId,
-        name: leadInfo.name,
-        email: leadInfo.email,
-        chat_transcript: messages
-      });
-      
-      if (!error) {
-        setShowLeadForm(false);
-        setMessages(prev => [...prev, { role: 'assistant', content: "Verification complete. A partner will reach out to your business email shortly." }]);
-      } else {
-        throw error;
-      }
-    } catch (err: any) {
-      // If DB fails, simulate success for the demo but log the error
-      console.error('Lead storage failed:', err);
-      setShowLeadForm(false);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Identity noted (Local Mode). In production, this would sync to your CRM." }]);
     }
   };
 
   const displayConfig = config || MOCK_CLIENTS[clientId] || DEFAULT_CONFIG;
 
   return (
-    <div className="fixed bottom-8 right-8 z-[2147483647] font-sans selection:bg-indigo-100">
+    <div className="fixed bottom-8 right-8 z-[2147483647] font-sans">
       {!isOpen ? (
         <button 
           onClick={() => setIsOpen(true)}
           style={{ backgroundColor: displayConfig.primary_color }}
-          className="w-16 h-16 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] flex items-center justify-center text-white hover:scale-110 transition-all active:scale-95 group border border-white/20"
+          className="w-16 h-16 rounded-3xl shadow-2xl flex items-center justify-center text-white hover:scale-110 transition-all border border-white/20"
         >
-          <svg className="w-8 h-8 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
         </button>
       ) : (
-        <div className="bg-white w-[420px] h-[720px] rounded-[3rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden border border-slate-200/50 animate-in fade-in zoom-in-95 slide-in-from-bottom-10 duration-500">
-          <div className="p-10 text-white relative overflow-hidden" style={{ backgroundColor: displayConfig.primary_color }}>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-            <div className="relative z-10 flex justify-between items-center">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl border border-white/30 rounded-[1.25rem] flex items-center justify-center font-black text-2xl shadow-inner">
+        <div className="bg-white w-[400px] h-[650px] rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-300">
+          <div className="p-8 text-white relative" style={{ backgroundColor: displayConfig.primary_color }}>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center font-black text-xl">
                   {displayConfig.name.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="font-black text-xl tracking-tight leading-none mb-1.5">{displayConfig.name}</h3>
-                  <div className="flex items-center text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
-                    <span className="w-2 h-2 bg-green-400 rounded-full mr-2 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
-                    {config ? 'Live Node' : 'Demo Mode'}
+                  <h3 className="font-bold text-lg leading-tight">{displayConfig.name}</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]' : 'bg-amber-400 animate-pulse'}`}></span>
+                    <span className="text-[9px] font-black uppercase tracking-widest opacity-80">
+                      {isLive ? 'Verified Live Node' : 'Simulated Session'}
+                    </span>
                   </div>
                 </div>
               </div>
-              <button onClick={() => setIsOpen(false)} className="bg-white/10 hover:bg-white/20 p-2.5 rounded-2xl transition-all">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button onClick={() => setIsOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
           </div>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-10 space-y-8 bg-[#FAFBFE]">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                <div className={`max-w-[85%] px-6 py-4.5 rounded-[2rem] text-[14px] leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-slate-900 text-white rounded-br-none' : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none shadow-[0_4px_12px_rgba(0,0,0,0.03)]'}`}>
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] px-5 py-3.5 rounded-2xl text-[13.5px] leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-slate-900 text-white rounded-br-none' : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none'}`}>
                   {m.content}
                 </div>
               </div>
             ))}
-
-            {showLeadForm && (
-              <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-2xl space-y-6 animate-in zoom-in-95 ring-1 ring-slate-100">
-                <div className="text-center">
-                  <h4 className="font-black text-slate-900 text-xl tracking-tight">Executive Verification</h4>
-                  <p className="text-xs text-slate-500 font-medium">Please confirm your business details to continue.</p>
-                </div>
-                <form onSubmit={submitLead} className="space-y-3">
-                  <input required placeholder="Name" className="w-full bg-slate-50 border-none rounded-2xl p-4.5 text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium" onChange={e => setLeadInfo({...leadInfo, name: e.target.value})} />
-                  <input required type="email" placeholder="Business Email" className="w-full bg-slate-50 border-none rounded-2xl p-4.5 text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium" onChange={e => setLeadInfo({...leadInfo, email: e.target.value})} />
-                  <button type="submit" className="w-full text-white py-5 rounded-2xl font-black text-sm shadow-xl hover:scale-[1.02] transition-all active:scale-95" style={{ backgroundColor: displayConfig.primary_color }}>
-                    Request Priority Access
-                  </button>
-                </form>
-              </div>
-            )}
-
             {isTyping && (
-              <div className="flex items-center space-x-3 text-slate-400">
-                <div className="flex space-x-1.5 bg-white border border-slate-100 px-4 py-3 rounded-full shadow-sm">
-                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+              <div className="flex items-center space-x-2 text-slate-400">
+                <div className="flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]"></div>
                 </div>
-                <span className="text-[9px] font-black uppercase tracking-widest">
-                  {displayConfig.thinking_enabled ? 'Deep Reasoning' : 'Analyzing'}
-                </span>
+                <span className="text-[8px] font-black uppercase tracking-widest">Generating Insight</span>
               </div>
             )}
           </div>
 
-          {!showLeadForm && (
-            <div className="p-10 bg-white border-t border-slate-50">
-              <form onSubmit={handleSendMessage} className="relative flex items-center">
-                <input 
-                  value={input} 
-                  onChange={e => setInput(e.target.value)}
-                  placeholder="Inquire here..." 
-                  className="w-full bg-slate-100/80 border-none rounded-[2rem] pl-8 pr-16 py-5 text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none font-medium placeholder:text-slate-400"
-                />
-                <button 
-                  type="submit"
-                  disabled={!input.trim()}
-                  className="absolute right-2 p-4 rounded-2xl text-white shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-0"
-                  style={{ backgroundColor: displayConfig.primary_color }}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                </button>
-              </form>
-              <div className="mt-4 text-center">
-                 <p className="text-[10px] text-slate-300 font-black uppercase tracking-[0.3em]">Titan Engine v2.5</p>
-              </div>
+          <div className="p-6 bg-white border-t border-slate-100">
+            <form onSubmit={handleSendMessage} className="relative flex items-center">
+              <input 
+                value={input} 
+                onChange={e => setInput(e.target.value)}
+                placeholder="Inquire..." 
+                className="w-full bg-slate-100 border-none rounded-full px-6 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+              />
+              <button type="submit" disabled={!input.trim()} className="absolute right-1.5 p-3 rounded-full text-white shadow-lg transition-all active:scale-95 disabled:opacity-0" style={{ backgroundColor: displayConfig.primary_color }}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+              </button>
+            </form>
+            <div className="mt-4 flex justify-between items-center px-2">
+               <p className="text-[9px] text-slate-300 font-black uppercase tracking-[0.2em]">Ansury Titan v2.5</p>
+               <div className="flex items-center space-x-1 opacity-40">
+                 <span className="text-[8px] font-bold text-slate-400">POWERED BY GEMINI 3</span>
+                 <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
