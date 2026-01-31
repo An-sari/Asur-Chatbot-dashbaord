@@ -20,42 +20,60 @@ const MOCK_BACKEND_CONFIGS: Record<string, any> = {
 export async function POST(req: Request) {
   try {
     const { clientId, messages } = await req.json();
+    const apiKeyHeader = req.headers.get('x-api-key');
     
-    // VALIDATION: Critical check for Gemini API Key
     if (!process.env.API_KEY) {
       return new Response(JSON.stringify({ 
-        error: 'Gemini API_KEY is missing in the environment. Please add it to your project settings.' 
-      }), { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+        error: 'Gemini API_KEY is missing in the environment.' 
+      }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
     let config = null;
+    let isAuthorized = false;
 
-    // 1. Try to fetch from Supabase
+    // 1. Fetch from Supabase and Validate
     try {
-      const { data, error } = await supabase
+      const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('*')
         .eq('id', clientId)
         .single();
       
-      if (data && !error) {
-        config = data;
+      if (clientData && !clientError) {
+        config = clientData;
+
+        if (apiKeyHeader) {
+          const { data: keyData, error: keyError } = await supabase
+            .from('api_keys')
+            .select('id')
+            .eq('client_id', clientId)
+            .eq('key', apiKeyHeader)
+            .single();
+          
+          if (keyData && !keyError) isAuthorized = true;
+        } else {
+          isAuthorized = true; // Implicit trust for widget for now
+        }
       }
     } catch (err) {
       console.warn('Supabase lookup failed, falling back to mock...');
     }
 
-    // 2. Fallback to mock
     if (!config) {
       config = MOCK_BACKEND_CONFIGS[clientId];
+      isAuthorized = true;
     }
 
     if (!config) {
       return new Response(JSON.stringify({ error: `Node '${clientId}' not initialized.` }), { 
         status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!isAuthorized && apiKeyHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid API Key.' }), { 
+        status: 401,
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -89,9 +107,6 @@ export async function POST(req: Request) {
     console.error('Gemini API Error:', error);
     return new Response(JSON.stringify({ 
       error: `Gemini Error: ${error.message || 'Unknown internal error'}` 
-    }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

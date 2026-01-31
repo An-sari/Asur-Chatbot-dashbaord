@@ -23,6 +23,13 @@ export interface ChatWidgetProps {
   configOverride?: Partial<ClientConfig>;
 }
 
+export interface ApiKey {
+  id: string;
+  client_id: string;
+  key: string;
+  created_at: string;
+}
+
 export interface Lead {
   id: string;
   client_id: string;

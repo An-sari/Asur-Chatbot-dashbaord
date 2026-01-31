@@ -34,6 +34,7 @@ export const onRequestPost = async (context: any) => {
   try {
     const body = await request.json();
     const { clientId, messages } = body;
+    const apiKeyHeader = request.headers.get('x-api-key');
 
     if (!clientId) {
       return new Response(JSON.stringify({ error: 'Missing clientId' }), { 
@@ -46,42 +47,66 @@ export const onRequestPost = async (context: any) => {
     const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     let config = null;
+    let isAuthorized = false;
 
-    // 1. Try to fetch from Supabase
+    // Security Check: If it's a real clientId, check the API Key
     if (supabaseUrl && supabaseKey) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        const { data, error } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('id', clientId)
-          .single();
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // 1. Fetch Client Config
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .single();
+      
+      if (clientData && !clientError) {
+        config = clientData;
         
-        if (data && !error) {
-          config = data;
+        // 2. Validate API Key
+        // Allow requests without API Key if they are from the authorized origins (demo/widget)
+        // BUT, strictly validate if an API key is provided
+        if (apiKeyHeader) {
+          const { data: keyData, error: keyError } = await supabase
+            .from('api_keys')
+            .select('id')
+            .eq('client_id', clientId)
+            .eq('key', apiKeyHeader)
+            .single();
+          
+          if (keyData && !keyError) {
+            isAuthorized = true;
+          }
+        } else {
+          // Fallback authorization: Check origins or just allow for widget mode
+          // In a production system, you'd be more strict here.
+          isAuthorized = true; 
         }
-      } catch (dbError) {
-        console.error('Database connection failed, checking mocks...');
       }
     }
 
-    // 2. If not in DB, check hardcoded mocks for demo purposes
-    if (!config) {
+    // 2. Fallback to mocks for demo stability
+    if (!config && MOCK_BACKEND_CONFIGS[clientId]) {
       config = MOCK_BACKEND_CONFIGS[clientId];
+      isAuthorized = true;
     }
 
-    // 3. If still nothing, throw 404
     if (!config) {
-      return new Response(JSON.stringify({ error: `Intelligence Node '${clientId}' not found in Database or Demo Cache.` }), { 
+      return new Response(JSON.stringify({ error: `Intelligence Node '${clientId}' not found.` }), { 
         status: 404, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
+    if (!isAuthorized && apiKeyHeader) {
+      return new Response(JSON.stringify({ error: 'Invalid API Key provided.' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     // 4. Initialize Gemini (Mandated Pattern)
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // Select model based on thinking requirement
+    const ai = new GoogleGenAI({ apiKey: env.API_KEY || process.env.API_KEY });
     const modelName = config.thinking_enabled ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
 
     const contents = messages.map((m: any) => ({
@@ -100,10 +125,6 @@ export const onRequestPost = async (context: any) => {
         } : undefined
       },
     });
-
-    if (!response.text) {
-      throw new Error("Empty response from AI engine.");
-    }
 
     return new Response(JSON.stringify({ text: response.text }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
